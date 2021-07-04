@@ -53,8 +53,11 @@ def train_epoch(model, optimizer, trainloader):
     for src, target in trainloader:
         optimizer.zero_grad()
 
-        pred = model(src, target)
-        loss = F.cross_entropy(pred.view(-1, pred.size(-1)), target.view(-1))
+        target_input = target[:, :-1]
+        target_output = target[:, 1:]
+        pred = model(src, target_input)
+
+        loss = F.cross_entropy(pred.view(-1, pred.size(-1)), target_output.contiguous().view(-1))
         print(loss)
 
         loss.backward()

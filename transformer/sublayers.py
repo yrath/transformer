@@ -27,7 +27,7 @@ class PositionEncoder(nn.Module):
 
 class MultiHeadAttention(nn.Module):
 
-    def __init__(self, d_model, n_heads):
+    def __init__(self, d_model, n_heads, subsequent_mask=False):
         super().__init__()
 
         if d_model % n_heads != 0:
@@ -37,6 +37,8 @@ class MultiHeadAttention(nn.Module):
         self.n_heads = n_heads
         self.d_attention = d_model // n_heads
 
+        self.subsequent_mask = subsequent_mask
+
         self.W_queries = nn.Linear(d_model, d_model, bias=False)
         self.W_keys = nn.Linear(d_model, d_model, bias=False)
         self.W_values = nn.Linear(d_model, d_model, bias=False)
@@ -44,7 +46,14 @@ class MultiHeadAttention(nn.Module):
         self.W_output = nn.Linear(d_model, d_model, bias=False)
 
     def attention(self, query, key, value):
-        x = F.softmax(torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_attention), dim=-1)
+        seq_size = query.size(-2)
+        softmax_input = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_attention)
+
+        if self.subsequent_mask:
+            mask = torch.tril(torch.ones(seq_size, seq_size))
+            softmax_input = softmax_input.masked_fill(mask == 0, float("-inf"))
+
+        x = F.softmax(softmax_input, dim=-1)
         x = torch.matmul(x, value)
 
         return x
