@@ -47,15 +47,19 @@ class Collater(object):
         return de_batch, en_batch
 
 
-def train_epoch(model, optimizer, trainloader):
+def train_epoch(model, optimizer, trainloader, device):
     model.train()
     total_loss = 0
     for src, target in trainloader:
         optimizer.zero_grad()
+        src, target = src.to(device), target.to(device)
+
+        seq_size = target.size()[1] - 1
+        subsequent_mask = torch.tril(torch.ones(seq_size, seq_size)).to(device)
 
         target_input = target[:, :-1]
         target_output = target[:, 1:]
-        pred = model(src, target_input)
+        pred = model(src, target_input, subsequent_mask)
 
         loss = F.cross_entropy(pred.view(-1, pred.size(-1)), target_output.contiguous().view(-1))
         print(loss)
@@ -103,13 +107,18 @@ def main(rebuild_vocab=False):
     collater = Collater(de_vocab, en_vocab, de_tokenizer, en_tokenizer)
 
     model = Transformer(len(de_vocab), len(en_vocab))
+    model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9)
+
+    model.train()
     for i_epoch in range(N_EPOCHS):
         train_dataset = torchtext.datasets.IWSLT2017(root=data_dir, split="train", language_pair=("de", "en"))
         trainloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collater)
-
-        training_loss = train_epoch(model, optimizer, trainloader)
-        print(f"Epoch {i_epoch}: {training_loss:.3f}")
+        try:
+            training_loss = train_epoch(model, optimizer, trainloader, device)
+            print(f"Epoch {i_epoch}: {training_loss:.3f}")
+        except KeyboardInterrupt:
+            break
 
 if __name__ == "__main__":
     main()

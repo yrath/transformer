@@ -64,7 +64,7 @@ class DecoderLayer(nn.Module):
     def __init__(self, d_model, d_ff, n_multi_head, dropout):
         super().__init__()
 
-        self.self_attention = MultiHeadAttention(d_model=d_model, n_heads=n_multi_head, subsequent_mask=True)
+        self.self_attention = MultiHeadAttention(d_model=d_model, n_heads=n_multi_head)
         self.dropout1 = nn.Dropout(p=dropout)
         self.layer_norm1 = nn.LayerNorm(d_model)
 
@@ -78,10 +78,10 @@ class DecoderLayer(nn.Module):
         self.dropout3 = nn.Dropout(p=dropout)
         self.layer_norm3 = nn.LayerNorm(d_model)
 
-    def forward(self, x, encoder_output):
+    def forward(self, x, encoder_output, subsequent_mask):
         # Self-attention block
         residual = x
-        x = self.self_attention(x, x)
+        x = self.self_attention(x, x, subsequent_mask)
         x = self.dropout1(x)
         x += residual
         x = self.layer_norm1(x)
@@ -111,13 +111,14 @@ class Decoder(nn.Module):
         super().__init__()
 
         self.layers = nn.ModuleList([
-            DecoderLayer(d_model=d_model, d_ff=d_ff, n_multi_head=n_multi_head, dropout=dropout)
+            DecoderLayer(d_model=d_model, d_ff=d_ff, n_multi_head=n_multi_head,
+                dropout=dropout)
             for _ in range(n_layers)
         ])
 
-    def forward(self, x, encoder_output):
+    def forward(self, x, encoder_output, subsequent_mask):
         for layer in self.layers:
-            x = layer(x, encoder_output)
+            x = layer(x, encoder_output, subsequent_mask)
         return x
 
 
@@ -144,7 +145,7 @@ class Transformer(nn.Module):
 
         self.linear_output = nn.Linear(d_model, d_output_dict)
 
-    def forward(self, inputs, outputs):
+    def forward(self, inputs, outputs, subsequent_mask):
         inputs = self.input_embedding(inputs) * math.sqrt(self.d_model)
         inputs = self.encoder_positional_encoding(inputs)
         inputs = self.encoder_dropout(inputs)
@@ -154,7 +155,7 @@ class Transformer(nn.Module):
         outputs = self.decoder_dropout(outputs)
 
         encoder_output = self.encoder(inputs)
-        decoder_output = self.decoder(outputs, encoder_output)
+        decoder_output = self.decoder(outputs, encoder_output, subsequent_mask)
 
         outp = self.linear_output(decoder_output)
 
