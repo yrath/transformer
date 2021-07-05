@@ -49,32 +49,44 @@ class Collater(object):
         return de_batch, en_batch
 
 
-def translate(model, loader, de_vocab, en_vocab, device, max_len=200):
+def create_masks(src, target, ignore_src_idx, ignore_target_idx, device):
+    seq_size = target.size()[1]
+    subsequent_mask = torch.tril(torch.ones(seq_size, seq_size)).to(device)
+
+    src_mask = src == ignore_src_idx
+    src_mask = src_mask.unsqueeze(-2)
+    target_mask = target == ignore_target_idx
+    target_mask = target_mask.unsqueeze(-2) & (subsequent_mask == 0)
+
+    return src_mask, target_mask
+
+
+def translate(model, loader, src_vocab, target_vocab, device, max_len=200):
     for src_sentence, target_sentence in loader:
         print("Sentence to translate:")
-        print(" ".join([de_vocab.lookup_token(token_idx) for token_idx in src_sentence[0]]))
+        print(" ".join([src_vocab.lookup_token(token_idx) for token_idx in src_sentence[0]]))
 
         src_sentence = src_sentence.to(device)
-        pred_sentence = torch.tensor([en_vocab["<bos>"]])
+        pred_sentence = torch.tensor([[target_vocab["<bos>"]]])
         for _ in range(max_len):
             seq_size = pred_sentence.size()[0]
-            subsequent_mask = torch.tril(torch.ones(seq_size, seq_size)).to(device)
+            src_mask, target_mask = create_masks(src_sentence, pred_sentence, src_vocab["<pad>"],
+                target_vocab["<pad>"], device)
 
-            pred = model(src_sentence, pred_sentence.unsqueeze(0).to(device), subsequent_mask)
+            pred = model(src_sentence, pred_sentence.to(device), src_mask, target_mask)
 
             next_word = torch.argmax(F.softmax(pred[:,-1,:], dim=-1))
-
-            pred_sentence = torch.cat([pred_sentence, next_word.unsqueeze(0)])
-            if next_word == en_vocab["<eos>"]:
+            pred_sentence = torch.cat([pred_sentence, next_word.unsqueeze(0).unsqueeze(0)], dim=-1)
+            if next_word == target_vocab["<eos>"]:
                 break
 
         print("Result:")
-        print(" ".join([en_vocab.lookup_token(token_idx) for token_idx in pred_sentence]))
+        print(" ".join([target_vocab.lookup_token(token_idx) for token_idx in pred_sentence[0]]))
         print("Target:")
-        print(" ".join([en_vocab.lookup_token(token_idx) for token_idx in target_sentence[0]]))
+        print(" ".join([target_vocab.lookup_token(token_idx) for token_idx in target_sentence[0]]))
 
 
-def train_epoch(model, optimizer, trainloader, device, ignore_index):
+def train_epoch(model, optimizer, trainloader, src_vocab, target_vocab, device):
     model.train()
     total_loss = 0
     for src, target in trainloader:
@@ -84,18 +96,13 @@ def train_epoch(model, optimizer, trainloader, device, ignore_index):
         target_input = target[:, :-1]
         target_output = target[:, 1:]
 
-        seq_size = target.size()[1] - 1
-        subsequent_mask = torch.tril(torch.ones(seq_size, seq_size)).to(device)
-
-        src_mask = src == ignore_index
-        src_mask = src_mask.unsqueeze(-2)
-        target_mask = target_input == ignore_index
-        target_mask = target_mask.unsqueeze(-2) & (subsequent_mask == 0)
+        src_mask, target_mask = create_masks(src, target_input, src_vocab["<pad>"], target_vocab["<pad>"],
+            device)
 
         pred = model(src, target_input, src_mask, target_mask)
 
         loss = F.cross_entropy(pred.view(-1, pred.size(-1)), target_output.contiguous().view(-1),
-            ignore_index=ignore_index)
+            ignore_index=target_vocab["<pad>"])
         print(loss)
 
         loss.backward()
@@ -149,7 +156,7 @@ def main(rebuild_vocab=False):
         train_dataset = torchtext.datasets.IWSLT2017(root=data_dir, split="train", language_pair=("de", "en"))
         trainloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collater)
         try:
-            training_loss = train_epoch(model, optimizer, trainloader, device, en_vocab["<pad>"])
+            training_loss = train_epoch(model, optimizer, trainloader, de_vocab, en_vocab, device)
             print(f"Epoch {i_epoch}: {training_loss:.3f}")
         except KeyboardInterrupt:
             break

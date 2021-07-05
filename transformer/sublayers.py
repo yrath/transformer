@@ -50,7 +50,7 @@ class MultiHeadAttention(nn.Module):
         softmax_input = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_attention)
 
         if mask is not None:
-            mask = mask.unsqueeze(1)
+            mask = mask.unsqueeze(1) # unsqueeze n_heads dimension
             softmax_input = softmax_input.masked_fill(mask, float("-inf"))
 
         x = F.softmax(softmax_input, dim=-1)
