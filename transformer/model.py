@@ -24,10 +24,10 @@ class EncoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(p=dropout)
         self.layer_norm2 = nn.LayerNorm(d_model)
 
-    def forward(self, x):
+    def forward(self, x, mask):
         # Attention block
         residual = x
-        x = self.attention(x, x)
+        x = self.attention(x, x, mask)
         x = self.dropout1(x)
         x += residual
         x = self.layer_norm1(x)
@@ -53,9 +53,9 @@ class Encoder(nn.Module):
             for _ in range(n_layers)
         ])
 
-    def forward(self, x):
+    def forward(self, x, mask):
         for layer in self.layers:
-            x = layer(x)
+            x = layer(x, mask)
         return x
 
 
@@ -78,17 +78,17 @@ class DecoderLayer(nn.Module):
         self.dropout3 = nn.Dropout(p=dropout)
         self.layer_norm3 = nn.LayerNorm(d_model)
 
-    def forward(self, x, encoder_output, subsequent_mask):
+    def forward(self, x, encoder_output, src_mask, target_mask):
         # Self-attention block
         residual = x
-        x = self.self_attention(x, x, subsequent_mask)
+        x = self.self_attention(x, x, target_mask)
         x = self.dropout1(x)
         x += residual
         x = self.layer_norm1(x)
 
         # Encoder-attention block
         residual = x
-        x = self.encoder_attention(x, encoder_output)
+        x = self.encoder_attention(x, encoder_output, src_mask)
         x = self.dropout2(x)
         x += residual
         x = self.layer_norm2(x)
@@ -116,9 +116,9 @@ class Decoder(nn.Module):
             for _ in range(n_layers)
         ])
 
-    def forward(self, x, encoder_output, subsequent_mask):
+    def forward(self, x, encoder_output, src_mask, target_mask):
         for layer in self.layers:
-            x = layer(x, encoder_output, subsequent_mask)
+            x = layer(x, encoder_output, src_mask, target_mask)
         return x
 
 
@@ -145,7 +145,7 @@ class Transformer(nn.Module):
 
         self.linear_output = nn.Linear(d_model, d_output_dict)
 
-    def forward(self, inputs, outputs, subsequent_mask):
+    def forward(self, inputs, outputs, src_mask, target_mask):
         inputs = self.input_embedding(inputs) * math.sqrt(self.d_model)
         inputs = self.encoder_positional_encoding(inputs)
         inputs = self.encoder_dropout(inputs)
@@ -154,8 +154,8 @@ class Transformer(nn.Module):
         outputs = self.decoder_positional_encoding(outputs)
         outputs = self.decoder_dropout(outputs)
 
-        encoder_output = self.encoder(inputs)
-        decoder_output = self.decoder(outputs, encoder_output, subsequent_mask)
+        encoder_output = self.encoder(inputs, src_mask)
+        decoder_output = self.decoder(outputs, encoder_output, src_mask, target_mask)
 
         outp = self.linear_output(decoder_output)
 

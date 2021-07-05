@@ -81,12 +81,18 @@ def train_epoch(model, optimizer, trainloader, device, ignore_index):
         optimizer.zero_grad()
         src, target = src.to(device), target.to(device)
 
+        target_input = target[:, :-1]
+        target_output = target[:, 1:]
+
         seq_size = target.size()[1] - 1
         subsequent_mask = torch.tril(torch.ones(seq_size, seq_size)).to(device)
 
-        target_input = target[:, :-1]
-        target_output = target[:, 1:]
-        pred = model(src, target_input, subsequent_mask)
+        src_mask = src == ignore_index
+        src_mask = src_mask.unsqueeze(-2)
+        target_mask = target_input == ignore_index
+        target_mask = target_mask.unsqueeze(-2) & (subsequent_mask == 0)
+
+        pred = model(src, target_input, src_mask, target_mask)
 
         loss = F.cross_entropy(pred.view(-1, pred.size(-1)), target_output.contiguous().view(-1),
             ignore_index=ignore_index)

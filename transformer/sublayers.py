@@ -45,12 +45,13 @@ class MultiHeadAttention(nn.Module):
 
         self.W_output = nn.Linear(d_model, d_model, bias=False)
 
-    def attention(self, query, key, value, subsequent_mask):
+    def attention(self, query, key, value, mask):
         seq_size = query.size(-2)
         softmax_input = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_attention)
 
-        if subsequent_mask is not None:
-            softmax_input = softmax_input.masked_fill(subsequent_mask == 0, float("-inf"))
+        if mask is not None:
+            mask = mask.unsqueeze(1)
+            softmax_input = softmax_input.masked_fill(mask, float("-inf"))
 
         x = F.softmax(softmax_input, dim=-1)
         x = torch.matmul(x, value)
