@@ -124,17 +124,17 @@ class Decoder(nn.Module):
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_input_dict, d_output_dict, d_model=512, d_ff=2048,
+    def __init__(self, d_vocab, d_model=512, d_ff=2048,
         n_encoder_layers=6, n_decoder_layers=6, n_multi_head=8,
         dropout=0.1, max_seq_size=200):
         super().__init__()
 
         self.d_model = d_model
 
-        self.input_embedding = nn.Embedding(d_input_dict, d_model)
+        self.input_embedding = nn.Embedding(d_vocab, d_model)
         self.encoder_positional_encoding = PositionEncoder(d_model=d_model, max_seq_size=max_seq_size)
         self.encoder_dropout = nn.Dropout(p=dropout)
-        self.output_embedding = nn.Embedding(d_output_dict, d_model)
+        self.output_embedding = nn.Embedding(d_vocab, d_model)
         self.decoder_positional_encoding = PositionEncoder(d_model=d_model, max_seq_size=max_seq_size)
         self.decoder_dropout = nn.Dropout(p=dropout)
 
@@ -143,7 +143,8 @@ class Transformer(nn.Module):
         self.decoder = Decoder(d_model=d_model, d_ff=d_ff, n_multi_head=n_multi_head,
             dropout=dropout, n_layers=n_decoder_layers)
 
-        self.linear_output = nn.Linear(d_model, d_output_dict)
+        self.linear_output = nn.Linear(d_model, d_vocab, bias=False)
+        self.linear_output.weight = self.output_embedding.weight
 
     def forward(self, inputs, outputs, src_mask, target_mask):
         inputs = self.input_embedding(inputs) * math.sqrt(self.d_model)
